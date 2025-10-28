@@ -54,18 +54,64 @@ const FALLBACK_FIREBASE_CONFIG = {
   // ... other details
   appId: "YOUR_APP_ID", // IMPORTANT: Used for the multi-tenant data path
 };
+```
+
 3. Local DevelopmentAssuming you are using a Node.js environment (e.g., Next.js, Vite):Bash# 1. Install dependencies
 npm install firebase react react-dom lucide-react
 
-# 2. Add Tailwind CSS (if not already set up)
+**2. Add Tailwind CSS (if not already set up)**
 
-# 3. Paste the provided code into your main component file (e.g., App.js or page.js)
+**3. Paste the provided code into your main component file (e.g., App.js or page.js)**
 
-# 4. Start the development server
+**4. Start the development server**
 npm run dev
-🧠 Technical Deep DiveData Synchronization IntegrityThe two most complex operations—adding an expense and settling up—rely on Firestore Batch Writes to guarantee data integrity across both users' collections:OperationUser 1 ActionUser 2 Action (Mirror)GuaranteeAdd ExpenseCreates document in .../users/U1/expenses with split: -1000Creates document in .../users/U2/expenses with split: +1000Both documents are written or neither is, preserving balance.Settle UpQueries/updates all isSettled: false docs to true in U1's collection.Queries/updates all isSettled: false docs to true in U2's collection.All related debts are marked settled simultaneously.Cloud Function Security (Avoiding 401 Errors)The application handles authenticated calls to Cloud Functions securely:The sendReminderCore function explicitly calls await user.getIdToken(true); before invoking the function. This forces a fresh ID token, proactively preventing the common 401 Unauthenticated error that can occur when client tokens expire mid-session. The httpsCallable wrapper then uses this refreshed token for the secure API call.Firestore Data StructureData is stored within a "multi-tenant" structure scoped by appId to allow for easy segregation if the application were to scale or handle multiple environments:/artifacts/{appId}
+
+## 🧠 Technical Deep Dive
+
+The reliability and real-time nature of **FairSplit** are built upon several key architectural decisions, focusing on **Firestore’s transactional integrity** and **robust security practices** for serverless Cloud Functions.
+
+---
+
+### 🔁 Data Synchronization Integrity: Atomic Operations
+
+The most complex operations — **adding an expense** and **settling up a balance** — rely on **Firestore Batch Writes** to guarantee **atomic data integrity** across two distinct user collections.
+
+This design ensures that every financial transaction either completes **fully for both users** or **fails entirely**, preventing mismatched balances or inconsistent states.
+
+| Operation | User 1 Action | User 2 Action (Mirror) | Integrity Guarantee |
+|------------|----------------|------------------------|---------------------|
+| **Add Expense** | Creates a document in `/users/U1/expenses` with `split: -1000` | Creates a mirrored document in `/users/U2/expenses` with `split: +1000` | **Atomicity:** Both documents are written or neither is, perfectly preserving the balance. |
+| **Settle Up** | Queries and updates all `isSettled: false` docs to `true` in U1’s collection | Performs the same update in U2’s collection | **Synchronization:** All related debts are marked settled simultaneously across both users. |
+
+This dual-write approach, handled in a single batch operation, enforces strict transactional consistency while maintaining real-time updates through Firestore’s listeners.
+
+---
+
+### 🔐 Cloud Function Security (Avoiding 401 Errors)
+
+**FairSplit** employs a proactive strategy to prevent the common **`401 Unauthenticated`** error that can occur when a client’s Firebase ID token expires mid-session.
+
+The application ensures every Cloud Function call is executed with a **freshly validated token**, maintaining end-to-end trust between client and serverless backend.
+
+#### ✅ Core Logic:
+
+1. **Token Refresh:**  
+   Before invoking a Cloud Function, the app explicitly requests a new ID token:
+   ```js
+   await user.getIdToken(true);
+Guaranteed Authorization:
+This call forces Firebase to retrieve a fresh, valid token from the server, ensuring the next operation is fully authenticated.
+
+Secure Function Call:
+The refreshed token is automatically used when invoking the callable function, e.g.:
+
+
+const sendReminder = httpsCallable(functions, "sendReminder");
+await sendReminder({ friendId });
+This token-refresh workflow guarantees that all serverless function calls (like sendReminder) are secure, authenticated, and fail-safe, even during extended user sessions.
     /public/data/invitations    (For pending friend requests)
     /users/{userId}
         /friends                (Metadata about friends: ID, email, name)
         /expenses               (Individual expense records)
+
 🤝 ContributionThis code provides a robust base for a modern split-expense app. Feel free to use and expand upon its features, especially the synchronization logic, which is the heart of its reliability.
