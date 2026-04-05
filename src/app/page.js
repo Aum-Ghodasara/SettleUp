@@ -3,28 +3,26 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, signInWithCustomToken, onAuthStateChanged, 
-  createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut 
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
+  GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail
 } from 'firebase/auth';
 import { 
   getFirestore, doc, collection, onSnapshot, addDoc, 
-  query, where, writeBatch, getDocs, setLogLevel, getDoc 
+  query, where, writeBatch, getDocs, setLogLevel 
 } from 'firebase/firestore';
 import { 
-  LogIn, Plus, X, UserPlus, Send, Check, DollarSign, Mail, Receipt, TrendingUp, TrendingDown, Users, User, ArrowLeft 
+  LogIn, Plus, X, UserPlus, Send, Check, IndianRupee, Mail, Receipt, TrendingUp, TrendingDown, Users, User, ArrowLeft 
 } from 'lucide-react';
 
-// Set Firestore log level for debugging
 setLogLevel('debug');
 
-// --- Firebase and Configuration Setup ---
-
 let db;
-let auth; // Global reference for use in functions outside App component
+let auth; 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
+// --- Configuration Setup ---
 const FALLBACK_FIREBASE_CONFIG = {
-    apiKey: "AIzaSyDL-Og2SFLv0WslKNEHAL7X7seXbHotJtQ",
+  apiKey: "AIzaSyDL-Og2SFLv0WslKNEHAL7X7seXbHotJtQ",
   authDomain: "fairsplit-50506.firebaseapp.com",
   projectId: "fairsplit-50506",
   storageBucket: "fairsplit-50506.firebasestorage.app",
@@ -35,204 +33,196 @@ const FALLBACK_FIREBASE_CONFIG = {
 const providedConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 const firebaseConfig = providedConfig.projectId ? providedConfig : FALLBACK_FIREBASE_CONFIG;
 
-
 // --- Firestore Path Helpers ---
-
 const getExpensesCollection = (userId) => collection(db, 'artifacts', appId, 'users', userId, 'expenses');
 const getFriendsCollection = (userId) => collection(db, 'artifacts', appId, 'users', userId, 'friends');
 const getInvitationsCollection = () => collection(db, 'artifacts', appId, 'public/data/invitations');
 
-
 // --- Utility Functions ---
-
 const formatCurrency = (amountInCents) => {
   if (typeof amountInCents !== 'number') return '₹0.00';
   return `₹${(Math.abs(amountInCents) / 100).toFixed(2)}`;
 };
-
 const getUsername = (email) => email?.split('@')[0] || 'Unknown User';
 
-// --- Component: UI Elements (Buttons, Inputs, Modals) ---
+// --- Components: Solid & Bold UI Elements ---
 
 const Button = ({ children, className = '', variant = 'primary', onClick, disabled = false, type = 'button' }) => {
-  const baseStyle = 'px-4 py-2 font-semibold rounded-lg transition-all duration-200 shadow-md flex items-center justify-center whitespace-nowrap';
+  const baseStyle = 'px-5 py-3 font-bold rounded-none transition-colors duration-200 flex items-center justify-center whitespace-nowrap focus:outline-none uppercase tracking-wide text-sm border-2';
   let variantStyle = '';
   
   switch (variant) {
     case 'primary':
-      variantStyle = 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-700/50';
+      variantStyle = 'bg-emerald-400 text-black border-emerald-400 hover:bg-emerald-300 hover:border-emerald-300';
       break;
     case 'secondary':
-      variantStyle = 'bg-gray-700 hover:bg-gray-600 text-white shadow-gray-900/50';
+      variantStyle = 'bg-zinc-800 text-white border-zinc-800 hover:bg-zinc-700 hover:border-zinc-700';
       break;
     case 'danger':
-      variantStyle = 'bg-red-600 hover:bg-red-700 text-white shadow-red-800/50';
+      variantStyle = 'bg-rose-500 text-white border-rose-500 hover:bg-rose-400 hover:border-rose-400';
       break;
-    case 'ghost':
-      variantStyle = 'bg-transparent text-gray-400 hover:text-white shadow-none';
+    case 'outline':
+      variantStyle = 'bg-transparent text-emerald-400 border-emerald-400 hover:bg-emerald-400/10';
       break;
     default:
-      variantStyle = 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-700/50';
+      variantStyle = 'bg-emerald-400 text-black border-emerald-400 hover:bg-emerald-300 hover:border-emerald-300';
   }
 
   if (disabled) {
-    variantStyle = 'bg-gray-600 text-gray-400 cursor-not-allowed shadow-none';
+    variantStyle = 'bg-zinc-900 text-zinc-600 border-zinc-900 cursor-not-allowed';
   }
 
   return (
-    <button 
-      onClick={onClick} 
-      className={`${baseStyle} ${variantStyle} ${className}`}
-      disabled={disabled}
-      type={type}
-    >
+    <button onClick={onClick} className={`${baseStyle} ${variantStyle} ${className}`} disabled={disabled} type={type}>
       {children}
     </button>
   );
 };
 
-// Input component customized for the dark/minimalist look
 const Input = ({ label, id, type = 'text', value, onChange, placeholder, required = false, className = '', icon: Icon }) => (
-  <div className="space-y-1">
-    {label && <label htmlFor={id} className="text-sm font-medium text-gray-400">{label}</label>}
-    <div className="flex items-center bg-gray-800 rounded-lg p-3">
-      {Icon && <Icon size={20} className="text-gray-400 mr-3 flex-shrink-0" />}
+  <div className="space-y-2">
+    {label && <label htmlFor={id} className="text-xs font-bold text-zinc-400 uppercase tracking-widest">{label}</label>}
+    <div className="flex items-center bg-black px-4 py-3 border-2 border-zinc-800 focus-within:border-emerald-400 transition-colors">
+      {Icon && <Icon size={20} className="text-emerald-400 mr-3 flex-shrink-0" />}
       <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        required={required}
-        className={`w-full bg-transparent text-white placeholder-gray-500 outline-none border-0 focus:ring-0 ${className}`}
+        id={id} type={type} value={value} onChange={onChange} placeholder={placeholder} required={required}
+        className={`w-full bg-transparent text-white placeholder-zinc-600 outline-none border-0 focus:ring-0 font-medium ${className}`}
       />
     </div>
   </div>
 );
 
+// 🔴 UPDATED: Modal now constrained to max-height with internal scrolling
 const Modal = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
   return (
-    <>
-      {isOpen && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-80 backdrop-blur-sm transition-opacity duration-300 font-sans"
-          onClick={onClose}
-        >
-          <div 
-            className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg m-4 p-6 md:p-8 transform transition-transform duration-300 scale-100 max-h-[90vh] overflow-y-auto border border-gray-700"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
-              <h2 className="text-2xl font-bold text-white">{title}</h2>
-              <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded-full bg-gray-700/50">
-                <X size={24} />
-              </button>
-            </div>
-            {children}
-          </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 transition-opacity duration-300 p-4 font-sans" onClick={onClose}>
+      <div className="bg-zinc-950 border-2 border-zinc-800 w-full max-w-lg max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center p-5 border-b-2 border-zinc-800 bg-zinc-900 shrink-0">
+          <h2 className="text-xl font-black text-white tracking-tight uppercase">{title}</h2>
+          <button onClick={onClose} className="text-zinc-400 hover:text-emerald-400 transition-colors">
+            <X size={24} strokeWidth={3} />
+          </button>
         </div>
-      )}
-    </>
+        <div className="p-5 overflow-y-auto">{children}</div>
+      </div>
+    </div>
   );
 };
 
 // --- Component: Auth Flow ---
 
-// FIX: Accept 'authInstance' as a prop
-const AuthScreen = ({ onLoginSuccess, authInstance }) => {
+const AuthScreen = ({ authInstance }) => {
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [resetMsg, setResetMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    // FIX: Use authInstance instead of global 'auth'
+    setError(''); setResetMsg(''); setLoading(true);
     const currentAuth = authInstance || auth; 
-    if (!currentAuth) {
-        setError("Authentication service is not yet ready.");
-        setLoading(false);
-        return;
-    }
+    if (!currentAuth) { setError("Auth service not ready."); setLoading(false); return; }
 
     try {
       if (isRegister) {
-        if (password.length < 6) {
-          setError('Password must be at least 6 characters.');
-          setLoading(false);
-          return;
-        }
+        if (password.length < 6) { setError('Password must be at least 6 characters.'); setLoading(false); return; }
         await createUserWithEmailAndPassword(currentAuth, email, password);
       } else {
         await signInWithEmailAndPassword(currentAuth, email, password);
       }
     } catch (err) {
-      console.error(err);
       const errorMessage = err.message.replace('Firebase: Error ', '').replace('(auth/', ' (');
-      
       if (errorMessage.includes('auth/email-already-in-use')) {
-        setError('This email is already registered. Please sign in below.');
+        setError('Email registered. Please sign in.');
         setIsRegister(false); 
-      } else {
-        setError(errorMessage);
-      }
-    } finally {
-      setLoading(false);
+      } else { setError(errorMessage); }
+    } finally { setLoading(false); }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError(''); setResetMsg('');
+    const currentAuth = authInstance || auth; 
+    if (!currentAuth) return;
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(currentAuth, provider);
+    } catch (err) {
+      setError(err.message.replace('Firebase: Error ', '').replace('(auth/', ' ('));
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setError(''); setResetMsg('');
+    const currentAuth = authInstance || auth; 
+    if (!email) { setError('Please enter your email above first.'); return; }
+    try {
+      await sendPasswordResetEmail(currentAuth, email);
+      setResetMsg('Password reset sent to your email.');
+    } catch (err) {
+      setError(err.message.replace('Firebase: Error ', '').replace('(auth/', ' ('));
     }
   };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-gray-900 p-4 font-sans">
-      <div className="w-full max-w-md bg-gray-800 p-8 md:p-10 rounded-xl shadow-2xl border border-gray-700">
-        <h1 className="text-4xl font-extrabold text-emerald-400 text-center mb-2 flex items-center justify-center">
-            <DollarSign size={36} className="mr-2"/> FairSplit
-        </h1>
-        <h2 className="text-xl font-bold text-white text-center mb-8">
-          {isRegister ? 'Create Your Account' : 'Welcome Back'}
-        </h2>
+    <div className="fixed inset-0 flex items-center justify-center bg-black p-4 font-sans overflow-y-auto selection:bg-emerald-400 selection:text-black">
+      <div className="w-full max-w-md bg-zinc-950 p-8 border-2 border-zinc-800 my-8">
+        <div className="flex items-center justify-center mb-8">
+            <div className="bg-emerald-400 text-black p-2 mr-3">
+                <IndianRupee size={32} strokeWidth={3} />
+            </div>
+            <h1 className="text-4xl font-black text-white tracking-tighter uppercase">FairSplit</h1>
+        </div>
         
-        <p className="text-sm text-gray-400 text-center mb-6">
-          {isRegister ? 'Already a user?' : 'New user?'}
-          <button 
-            onClick={() => { setIsRegister(!isRegister); setError(''); }}
-            className="text-emerald-400 hover:text-emerald-300 font-medium ml-1"
-          >
-            {isRegister ? 'Log in' : 'Register Now'}
-          </button>
-        </p>
+        <h2 className="text-lg font-bold text-zinc-500 text-center mb-8 uppercase tracking-widest">
+          {isRegister ? 'Create an Account' : 'System Login'}
+        </h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input 
-            id="email" 
-            label="Email" 
-            type="email" 
-            placeholder="username@example.com" 
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)} 
-            required 
-            icon={Mail}
-          />
-          <Input 
-            id="password" 
-            label="Password" 
-            type="password" 
-            placeholder="Enter Password (min 6 chars)" 
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
-            required 
-            icon={LogIn}
-          />
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <Input id="email" label="Email Address" type="email" placeholder="you@domain.com" value={email} onChange={(e) => setEmail(e.target.value)} required icon={Mail} />
+          <div className="space-y-2">
+            <Input id="password" label="Password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required icon={LogIn} />
+            {!isRegister && (
+              <div className="flex justify-end pt-2">
+                <button type="button" onClick={handleForgotPassword} className="text-xs font-bold text-emerald-400 hover:text-emerald-300 uppercase tracking-widest transition-colors">
+                  Forgot password?
+                </button>
+              </div>
+            )}
+          </div>
 
-          {error && <p className="text-red-400 text-sm pt-2">{error}</p>}
+          {error && <div className="bg-rose-950 border-l-4 border-rose-500 text-rose-400 text-sm font-bold p-4 uppercase">{error}</div>}
+          {resetMsg && <div className="bg-emerald-950 border-l-4 border-emerald-400 text-emerald-400 text-sm font-bold p-4 uppercase">{resetMsg}</div>}
           
-          <Button type="submit" className="w-full mt-6 h-12 text-lg" disabled={loading}>
-            {loading ? 'Processing...' : (isRegister ? 'Register' : 'Sign In')}
+          <Button type="submit" className="w-full h-14 mt-4 text-base" disabled={loading}>
+            {loading ? 'Processing...' : (isRegister ? 'Register' : 'Authenticate')}
           </Button>
         </form>
+
+        <div className="mt-8">
+          <div className="relative flex items-center justify-center mb-8">
+            <div className="border-t-2 border-zinc-800 w-full"></div>
+            <span className="bg-zinc-950 px-4 text-xs font-bold text-zinc-600 uppercase tracking-widest absolute">or</span>
+          </div>
+          <Button variant="secondary" onClick={handleGoogleSignIn} className="w-full h-14 border-2 border-zinc-800">
+            <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+            </svg>
+            Sign in with Google
+          </Button>
+        </div>
+
+        <p className="text-sm font-bold text-zinc-500 text-center mt-10 uppercase tracking-wider">
+          {isRegister ? 'Already a user?' : "No account?"}
+          <button onClick={() => { setIsRegister(!isRegister); setError(''); setResetMsg(''); }} className="text-emerald-400 hover:text-emerald-300 ml-2 underline underline-offset-4 decoration-2">
+            {isRegister ? 'Log in' : 'Create one'}
+          </button>
+        </p>
       </div>
     </div>
   );
@@ -250,231 +240,144 @@ const AddExpenseModal = ({ userId, friend, isOpen, onClose, addExpenseToDb }) =>
 
   const friendName = friend?.friendName || 'Friend';
   const friendId = friend?.friendId;
-  
   const categories = ['Food', 'Travel', 'Rent', 'Utilities', 'Other'];
 
   const splitOptions = useMemo(() => [
-    { value: 'YOU_PAID_SPLIT_EQUAL', label: 'You Paid, Split Equally' },
-    { value: 'X_PAID_SPLIT_EQUAL', label: `${friendName} Paid, Split Equally` },
-    { value: 'YOU_OWED_FULL', label: 'You Paid, They Owed Full Amount' },
-    { value: 'X_OWED_FULL', label: `${friendName} Paid, You Owed Full Amount` },
+    { value: 'YOU_PAID_SPLIT_EQUAL', label: 'You paid, split equally' },
+    { value: 'X_PAID_SPLIT_EQUAL', label: `${friendName} paid, split equally` },
+    { value: 'YOU_OWED_FULL', label: 'You paid, they owe full amount' },
+    { value: 'X_OWED_FULL', label: `${friendName} paid, you owe full amount` },
   ], [friendName]);
   
-  const resetForm = () => {
-    setDescription('');
-    setAmount('');
-    setCategory('Food');
-    setSplitType('YOU_PAID_SPLIT_EQUAL');
-    setError('');
-  };
+  const resetForm = () => { setDescription(''); setAmount(''); setCategory('Food'); setSplitType('YOU_PAID_SPLIT_EQUAL'); setError(''); };
 
   const calculateSplit = (totalAmount) => {
-    const numericAmount = parseFloat(totalAmount) * 100; // Store in cents
+    const numericAmount = parseFloat(totalAmount) * 100; 
     const halfAmount = Math.round(numericAmount / 2);
-    
-    let paidBy = userId;
-    let owedToYou = 0; // Negative means friend owes you, Positive means you owe friend
-    
+    let paidBy = userId; let owedToYou = 0; 
     switch (splitType) {
-      case 'YOU_PAID_SPLIT_EQUAL':
-        paidBy = userId;
-        owedToYou = -halfAmount; // Friend owes you
-        break;
-      case 'X_PAID_SPLIT_EQUAL':
-        paidBy = friendId;
-        owedToYou = halfAmount; // You owe friend
-        break;
-      case 'YOU_OWED_FULL':
-        paidBy = userId;
-        owedToYou = -numericAmount; // Friend owes you full amount
-        break;
-      case 'X_OWED_FULL':
-        paidBy = friendId;
-        owedToYou = numericAmount; // You owe friend full amount
-        break;
-      default:
-        paidBy = userId;
+      case 'YOU_PAID_SPLIT_EQUAL': paidBy = userId; owedToYou = -halfAmount; break;
+      case 'X_PAID_SPLIT_EQUAL': paidBy = friendId; owedToYou = halfAmount; break;
+      case 'YOU_OWED_FULL': paidBy = userId; owedToYou = -numericAmount; break;
+      case 'X_OWED_FULL': paidBy = friendId; owedToYou = numericAmount; break;
+      default: paidBy = userId;
     }
-    
     return { paidBy, amountInCents: numericAmount, owedToYou, splitType };
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+    e.preventDefault(); setError('');
     const numericAmount = parseFloat(amount);
-    
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      setError('Please enter a valid amount greater than zero.');
-      return;
-    }
+    if (isNaN(numericAmount) || numericAmount <= 0) { setError('Amount must be greater than zero.'); return; }
     
     setLoading(true);
     const splitDetails = calculateSplit(numericAmount);
     
     const newExpense = {
-      description,
-      amount: splitDetails.amountInCents, // Total amount in cents
-      date: new Date().toISOString().split('T')[0],
-      category,
-      friendId: friendId, 
-      userId: userId, 
-      split: splitDetails.owedToYou, // Your net balance change
-      paidBy: splitDetails.paidBy,
-      isSettled: false,
+      description, amount: splitDetails.amountInCents, date: new Date().toISOString().split('T')[0],
+      category, friendId: friendId, userId: userId, split: splitDetails.owedToYou, paidBy: splitDetails.paidBy, isSettled: false,
     };
     
     try {
-      // Use the synchronized expense addition function
       await addExpenseToDb(newExpense); 
-      resetForm();
-      onClose();
+      resetForm(); onClose();
     } catch (err) {
-      console.error('Failed to add expense:', err);
-      setError('Failed to save expense. Check console for details.');
-    } finally {
-      setLoading(false);
-    }
+      setError('Failed to save. Is the backend server running?');
+    } finally { setLoading(false); }
   };
 
   const numericAmount = parseFloat(amount) || 0;
   const splitPreview = calculateSplit(numericAmount);
   
-  let previewText = '';
-  let previewColor = 'text-gray-400';
+  let previewText = 'AWAITING AMOUNT';
+  let previewColor = 'text-zinc-600';
+  let previewBorder = 'border-zinc-800';
   
   if (numericAmount > 0) {
     const absSplit = formatCurrency(splitPreview.owedToYou);
     const friendNameShort = friendName.split(' ')[0]; 
-    
     if (splitPreview.owedToYou < 0) {
-      // Friend owes you (negative split)
-      previewText = `${friendNameShort} owes you ${absSplit}.`;
-      previewColor = 'text-green-400';
+      previewText = `${friendNameShort.toUpperCase()} OWES YOU ${absSplit}`;
+      previewColor = 'text-emerald-400'; previewBorder = 'border-emerald-500/50';
     } else if (splitPreview.owedToYou > 0) {
-      // You owe friend (positive split)
-      previewText = `You owe ${friendNameShort} ${absSplit}.`;
-      previewColor = 'text-red-400';
+      previewText = `YOU OWE ${friendNameShort.toUpperCase()} ${absSplit}`;
+      previewColor = 'text-rose-400'; previewBorder = 'border-rose-500/50';
     } else {
-      previewText = 'Everyone is settled.';
+      previewText = 'FULLY SETTLED';
     }
-  } else {
-    previewText = 'Enter amount and select split to see breakdown.';
   }
 
-
+  // 🔴 UPDATED: Tightened padding, reduced text sizes, and hid webkit spin buttons
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Add Expense">
-      <div className="flex items-center text-lg text-white mb-6">
-        <p className="mr-2 text-gray-400">With:</p>
-        <div className="flex items-center bg-gray-700 rounded-full py-1 px-3">
-            <User size={18} className="mr-2 text-emerald-400"/>
-            <span className="font-semibold">{friendName}</span>
-        </div>
-      </div>
-      
-      <form onSubmit={handleSubmit} className="space-y-6"> 
-        
-        {/* Input Block - Minimalist Style */}
-        <div className="p-4 bg-gray-900 rounded-xl space-y-4 shadow-inner">
-          <Input 
-            id="desc" 
-            placeholder="Enter a description" 
-            value={description} 
-            onChange={(e) => setDescription(e.target.value)} 
-            required 
-            icon={Receipt}
-            className="text-lg"
-          />
-          <div className="flex items-center justify-center">
-            <span className="text-3xl font-extrabold text-gray-500 mr-2">₹</span>
-            <input 
-              id="amount" 
-              type="number" 
-              placeholder="0.00" 
-              value={amount} 
-              onChange={(e) => setAmount(e.target.value)} 
-              required 
-              className="text-5xl font-extrabold text-white bg-transparent border-0 focus:ring-0 w-3/4 text-center pb-1"
+    <Modal isOpen={isOpen} onClose={onClose} title="Log Expense">
+      <form onSubmit={handleSubmit} className="space-y-5"> 
+        <div className="bg-black p-5 border-2 border-zinc-800 space-y-4">
+          <Input id="desc" placeholder="Item or Service" value={description} onChange={(e) => setDescription(e.target.value)} required icon={Receipt} />
+          
+          <div className="flex items-center justify-center py-3 border-y-2 border-zinc-900">
+            <span className="text-3xl font-black text-emerald-400 mr-2">₹</span>
+            <input id="amount" type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} required 
+              className="text-4xl font-black text-white bg-transparent border-0 focus:ring-0 w-2/3 text-center p-0 placeholder-zinc-800 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
           </div>
-          
-          <div className="space-y-1 pt-4">
-            <label className="text-sm font-medium text-gray-400">Category</label>
-            <select 
-              value={category} 
-              onChange={(e) => setCategory(e.target.value)} 
-              className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 border-transparent"
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Category</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} 
+              className="w-full px-4 py-2.5 bg-zinc-900 text-white font-bold uppercase border-2 border-zinc-800 focus:ring-0 focus:border-emerald-400"
             >
               {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
             </select>
           </div>
         </div>
         
-        {/* Split Options (Radio buttons) */}
-        <div className="pt-2 space-y-3">
-          <p className="font-semibold text-gray-300">How should it be split?</p>
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">Allocation</p>
           {splitOptions.map((option) => (
-            <label key={option.value} className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-600 transition-colors border border-gray-600">
-              <input
-                type="radio"
-                name="split-type"
-                value={option.value}
-                checked={splitType === option.value}
-                onChange={() => setSplitType(option.value)}
-                className="text-emerald-500 focus:ring-emerald-500 border-gray-500 bg-gray-800"
+            <label key={option.value} className={`flex items-center space-x-3 p-3 cursor-pointer border-2 transition-colors ${splitType === option.value ? 'bg-emerald-400/10 border-emerald-400' : 'bg-black border-zinc-800 hover:border-zinc-600'}`}>
+              <input type="radio" name="split-type" value={option.value} checked={splitType === option.value} onChange={() => setSplitType(option.value)}
+                className="text-emerald-400 focus:ring-emerald-400 border-zinc-700 bg-black w-4 h-4 rounded-none"
               />
-              <span className="text-sm text-gray-200">{option.label}</span>
+              <span className={`text-xs font-bold uppercase tracking-wider ${splitType === option.value ? 'text-white' : 'text-zinc-500'}`}>{option.label}</span>
             </label>
           ))}
         </div>
         
-        {/* Dynamic Preview (NEW UX FEATURE) */}
-        <div className="p-4 bg-emerald-900/30 rounded-lg border border-emerald-700/50">
-          <p className="font-semibold text-emerald-300">Split Preview</p>
-          <p className={`text-xl font-bold ${previewColor} mt-1`}>{previewText}</p>
+        <div className={`p-4 border-l-4 bg-black transition-colors ${previewBorder}`}>
+          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Net Result</p>
+          <p className={`text-lg font-black tracking-tight ${previewColor}`}>{previewText}</p>
         </div>
 
-        {error && <p className="text-red-400 text-sm">{error}</p>}
-
-        <Button type="submit" className="w-full mt-6 h-12 text-lg" disabled={loading}>
-          {loading ? 'Saving...' : 'Save Expense'}
-        </Button>
+        {error && <div className="bg-rose-950 border-l-4 border-rose-500 text-rose-400 text-xs font-bold p-3 uppercase">{error}</div>}
+        <Button type="submit" className="w-full h-12 text-base" disabled={loading}>{loading ? 'Saving...' : 'Confirm'}</Button>
       </form>
     </Modal>
   );
 };
 
-// --- Component: Expense Card and Formatting ---
+// --- Component: Expense Card ---
 
 const ExpenseCard = ({ expense, userName }) => {
-  const isOwed = expense.split < 0; // Negative split means you are owed
+  const isOwed = expense.split < 0; 
   const amount = formatCurrency(expense.split);
   
-  let statusText = '';
-  let statusColor = '';
-  
-  if (expense.isSettled) {
-    statusText = 'Settled';
-    statusColor = 'text-gray-500';
-  } else if (isOwed) {
-    statusText = `Owes you ${amount}`;
-    statusColor = 'text-green-400 font-medium';
-  } else {
-    statusText = `You owe ${amount}`;
-    statusColor = 'text-red-400 font-medium';
-  }
+  let statusText = ''; let statusColor = '';
+  if (expense.isSettled) { statusText = 'SETTLED'; statusColor = 'text-zinc-600'; } 
+  else if (isOwed) { statusText = `OWES ${amount}`; statusColor = 'text-emerald-400'; } 
+  else { statusText = `OWE ${amount}`; statusColor = 'text-rose-400'; }
 
   return (
-    <div className="flex justify-between items-center p-4 bg-gray-800 rounded-xl shadow-lg border border-gray-700">
+    <div className="flex justify-between items-center p-5 bg-black border-2 border-zinc-800 hover:border-emerald-400/50 transition-colors group">
       <div className="flex-1">
-        <p className="font-bold text-gray-200">{expense.description}</p>
-        <p className="text-xs text-gray-400 mt-0.5">{expense.category} · {expense.date}</p>
-        <p className="text-xs mt-1 text-gray-500">Paid by: {expense.paidBy === expense.userId ? userName : expense.friendName}</p>
+        <p className="font-bold text-white text-lg tracking-tight uppercase">{expense.description}</p>
+        <div className="flex items-center text-xs font-bold text-zinc-500 mt-2 space-x-3 uppercase tracking-wider">
+            <span className="bg-zinc-900 text-emerald-400 border border-zinc-800 px-2 py-1">{expense.category}</span>
+            <span>{expense.date}</span>
+        </div>
       </div>
       <div className="text-right ml-4">
-        <p className={`text-sm ${statusColor}`}>{statusText}</p>
-        <p className="text-xs text-gray-500 mt-1">Total: {formatCurrency(expense.amount)}</p>
+        <p className={`text-sm font-black tracking-wider ${statusColor}`}>{statusText}</p>
+        <p className="text-xs font-bold text-zinc-600 mt-2 uppercase">TOTAL {formatCurrency(expense.amount)}</p>
       </div>
     </div>
   );
@@ -484,30 +387,16 @@ const ExpenseCard = ({ expense, userName }) => {
 
 const InvitationCard = ({ invite, userId, userData, handleAccept }) => {
   const [loading, setLoading] = useState(false);
-  
-  const acceptInvite = async () => {
-    setLoading(true);
-    try {
-      await handleAccept(invite.id, invite.senderId, invite.senderEmail, userId, userData.email);
-    } catch(e) {
-      console.error("Accept failed:", e);
-      setLoading(false); 
-    }
-  }
+  const acceptInvite = async () => { setLoading(true); try { await handleAccept(invite.id, invite.senderId, invite.senderEmail, userId, userData.email); } catch(e) { setLoading(false); } }
 
   return (
-    <div className="p-4 bg-gray-700 rounded-xl shadow-sm border border-gray-600 flex justify-between items-center mb-2">
+    <div className="p-5 bg-zinc-900 border-l-4 border-emerald-400 flex justify-between items-center mb-4">
       <div className="flex-1">
-        <p className="font-semibold text-white">Friend Request</p>
-        <p className="text-sm text-gray-400">From: <span className="font-medium text-emerald-400">{invite.senderEmail}</span></p>
+        <p className="font-bold text-white tracking-widest uppercase text-xs mb-1">New Request</p>
+        <p className="text-sm font-medium text-zinc-400">{invite.senderEmail}</p>
       </div>
-      <Button 
-        variant="primary" 
-        className="flex items-center text-sm" 
-        onClick={acceptInvite}
-        disabled={loading}
-      >
-        {loading ? 'Processing...' : <><Check size={16} className="mr-1"/> Accept</>}
+      <Button variant="primary" className="text-xs px-6 py-2" onClick={acceptInvite} disabled={loading}>
+        {loading ? '...' : 'Accept'}
       </Button>
     </div>
   );
@@ -517,88 +406,60 @@ const InvitationCard = ({ invite, userId, userData, handleAccept }) => {
 
 const FriendDetailView = ({ friend, userId, userData, expenses, settleUp, goBack, addExpense }) => {
     const userName = getUsername(userData.email);
+    const netBalance = expenses.reduce((net, exp) => { return (exp.friendId === friend.friendId && !exp.isSettled) ? net + exp.split : net; }, 0);
     
-    // Calculate net balance for the specific friend
-    const netBalance = expenses.reduce((net, exp) => {
-        if (exp.friendId === friend.friendId && !exp.isSettled) {
-            return net + exp.split;
-        }
-        return net;
-    }, 0);
-    
-    const isOwed = netBalance < 0;
-    const isSettled = netBalance === 0;
+    const isOwed = netBalance < 0; const isSettled = netBalance === 0;
     const absBalance = formatCurrency(netBalance);
-    const balanceMessage = isOwed ? `${friend.friendName} owes you ${absBalance}` : 
-                           (isSettled ? `You are settled up` : `You owe ${friend.friendName} ${absBalance}`);
-
-    const balanceClass = isOwed ? 'text-green-400' : (isSettled ? 'text-gray-400' : 'text-red-400');
+    const balanceMessage = isOwed ? `${friend.friendName.toUpperCase()} OWES ${absBalance}` : (isSettled ? `SETTLED UP` : `YOU OWE ${friend.friendName.toUpperCase()} ${absBalance}`);
+    const balanceClass = isOwed ? 'text-emerald-400' : (isSettled ? 'text-zinc-600' : 'text-rose-400');
     
-    // Filter expenses specific to this friend (including settled ones)
-    const friendExpenses = expenses
-        .filter(exp => exp.friendId === friend.friendId)
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    // Group expenses by month (for better UX, similar to image)
+    const friendExpenses = expenses.filter(exp => exp.friendId === friend.friendId).sort((a, b) => new Date(b.date) - new Date(a.date));
     const groupedExpenses = friendExpenses.reduce((groups, expense) => {
         const monthYear = new Date(expense.date).toLocaleString('en-US', { year: 'numeric', month: 'long' });
-        if (!groups[monthYear]) {
-            groups[monthYear] = [];
-        }
+        if (!groups[monthYear]) groups[monthYear] = [];
         groups[monthYear].push(expense);
         return groups;
     }, {});
     
     return (
-        <div className="min-h-screen bg-gray-900 font-sans">
-            {/* Header/Banner */}
-            <div className="bg-emerald-900/40 p-6 pt-10 border-b border-gray-700 shadow-lg">
-                <button onClick={goBack} className="text-gray-300 hover:text-white mb-4 flex items-center">
-                    <ArrowLeft size={24} className="mr-2"/> Back to Friends
-                </button>
-                <div className="flex flex-col items-center text-center">
-                    {/* Mock Avatar */}
-                    <div className="w-16 h-16 bg-emerald-500 rounded-full text-white flex items-center justify-center text-2xl font-bold mb-3 border-4 border-gray-800">
-                        {friend.friendName.charAt(0).toUpperCase()}
+        <div className="min-h-screen bg-black font-sans pb-32 text-white selection:bg-emerald-400 selection:text-black">
+            <div className="bg-zinc-950 px-6 py-8 border-b-2 border-zinc-800">
+                <div className="max-w-4xl mx-auto">
+                    <button onClick={goBack} className="text-zinc-500 hover:text-white mb-8 flex items-center font-bold uppercase tracking-widest text-xs transition-colors">
+                        <ArrowLeft size={16} className="mr-3"/> Back
+                    </button>
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                        <div className="flex items-center">
+                            <div className="w-16 h-16 bg-emerald-400 text-black flex items-center justify-center text-3xl font-black mr-6 border-2 border-emerald-400">
+                                {friend.friendName.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <h1 className="text-4xl font-black text-white mb-1 tracking-tighter uppercase">{friend.friendName}</h1>
+                                <p className={`text-lg font-black tracking-widest uppercase ${balanceClass}`}>{balanceMessage}</p>
+                            </div>
+                        </div>
+                        <Button onClick={() => settleUp(friend.friendId)} disabled={isSettled || netBalance < 0} variant={isSettled || isOwed ? 'secondary' : 'outline'} className="w-full md:w-auto h-12 px-8">
+                            <Check size={18} className="mr-3"/> Mark Settled
+                        </Button>
                     </div>
-                    <h1 className="text-3xl font-bold text-white mb-1">{friend.friendName}</h1>
-                    <p className={`text-lg font-semibold ${balanceClass}`}>{balanceMessage}</p>
-                </div>
-
-                <div className="flex justify-center space-x-4 mt-6">
-                    <Button 
-                        onClick={() => settleUp(friend.friendId)}
-                        disabled={isSettled || netBalance < 0} // Only enable if YOU owe the friend (netBalance > 0)
-                        variant={isSettled ? 'secondary' : (isOwed ? 'secondary' : 'danger')} 
-                        className="w-32 h-10"
-                    >
-                        <DollarSign size={16} className="mr-1"/> Settle Up
-                    </Button>
-                    <Button 
-                        onClick={() => addExpense(friend)}
-                        variant="primary" 
-                        className="w-32 h-10"
-                    >
-                        <Plus size={16} className="mr-1"/> Add Expense
-                    </Button>
                 </div>
             </div>
 
-            {/* Expense List */}
-            <div className="p-4 md:p-8">
+            <div className="max-w-4xl mx-auto p-6 mt-8">
                 {Object.keys(groupedExpenses).length === 0 ? (
-                    <p className="text-gray-500 text-center py-10 bg-gray-800 rounded-xl border border-gray-700">No expenses recorded with {friend.friendName}.</p>
+                    <div className="text-center py-20 bg-zinc-950 border-2 border-zinc-900 mt-4">
+                        <Receipt size={48} className="mx-auto text-zinc-800 mb-6"/>
+                        <p className="text-zinc-600 font-bold uppercase tracking-widest">No transaction history.</p>
+                    </div>
                 ) : (
                     Object.keys(groupedExpenses).sort((a, b) => new Date(b) - new Date(a)).map(monthYear => (
-                        <div key={monthYear} className="mb-6">
-                            <h3 className="text-sm font-semibold text-gray-400 uppercase mb-3 border-b border-gray-700 pb-1">{monthYear}</h3>
-                            <div className="space-y-3">
+                        <div key={monthYear} className="mb-10">
+                            <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-4 pl-2 border-l-4 border-emerald-400">
+                                {monthYear}
+                            </h3>
+                            <div className="space-y-4">
                                 {groupedExpenses[monthYear].map(exp => (
-                                    <ExpenseCard 
-                                        key={exp.id} 
-                                        expense={{...exp, friendName: friend.friendName}}
-                                        userName={userName}
-                                    />
+                                    <ExpenseCard key={exp.id} expense={{...exp, friendName: friend.friendName}} userName={userName} />
                                 ))}
                             </div>
                         </div>
@@ -606,24 +467,18 @@ const FriendDetailView = ({ friend, userId, userData, expenses, settleUp, goBack
                 )}
             </div>
             
-            {/* FAB for adding expense with this specific friend */}
-            <div className="fixed bottom-6 right-6 z-40">
-                <Button 
-                    onClick={() => addExpense(friend)}
-                    className="w-48 h-12 flex items-center justify-center text-lg shadow-xl !bg-emerald-600 hover:!bg-emerald-700"
-                >
-                    <Plus size={20} className="mr-2"/> Add Expense
+            <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black to-transparent z-40 flex justify-center">
+                <Button onClick={() => addExpense(friend)} className="h-14 w-full max-w-sm shadow-2xl !bg-emerald-400 text-lg font-black tracking-widest border-2 border-emerald-400">
+                    <Plus size={24} className="mr-3"/> Add Expense
                 </Button>
             </div>
         </div>
     );
 };
 
-
 // --- Component: Dashboard Views ---
 
-const Dashboard = ({ userId, userData, expenses, friends, invitations, addExpenseToDb, settleUp, sendInvite, handleAccept }) => {
-  // activeFriend now holds the friend object for the detail view. null means main list view.
+const Dashboard = ({ userId, userData, expenses, friends, invitations, addExpenseToDb, settleUp, sendInvite, handleAccept, signOutUser }) => {
   const [activeFriend, setActiveFriend] = useState(null); 
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -634,285 +489,122 @@ const Dashboard = ({ userId, userData, expenses, friends, invitations, addExpens
 
   const userName = getUsername(userData.email);
 
-  // --- Core Balance Calculation ---
-  const calculateBalance = useCallback((friendId) => {
-    return expenses.reduce((net, exp) => {
-      if (exp.friendId === friendId && !exp.isSettled) {
-        return net + exp.split;
-      }
-      return net;
-    }, 0);
-  }, [expenses]);
-  
-  const totalBalances = useMemo(() => {
-    return friends.map(friend => ({
-      ...friend,
-      netBalance: calculateBalance(friend.friendId),
-    }));
-  }, [friends, calculateBalance]);
+  const calculateBalance = useCallback((friendId) => { return expenses.reduce((net, exp) => { return (exp.friendId === friendId && !exp.isSettled) ? net + exp.split : net; }, 0); }, [expenses]);
+  const totalBalances = useMemo(() => { return friends.map(friend => ({ ...friend, netBalance: calculateBalance(friend.friendId) })); }, [friends, calculateBalance]);
+  const overallBalance = useMemo(() => { return totalBalances.reduce((total, friend) => total + friend.netBalance, 0); }, [totalBalances]);
 
-  // --- Overall Net Balance Calculation ---
-  const overallBalance = useMemo(() => {
-    return totalBalances.reduce((total, friend) => total + friend.netBalance, 0);
-  }, [totalBalances]);
-
-
-  // --- Handlers ---
-  
-  const handleSettleUp = (friendId) => {
-    settleUp(friendId);
-  };
-  
-  const handleAddExpense = (friend) => {
-    setActiveFriend(friend); // Set the friend context for the modal
-    setIsExpenseModalOpen(true);
-  };
+  const handleSettleUp = (friendId) => settleUp(friendId);
+  const handleAddExpense = (friend) => { setActiveFriend(friend); setIsExpenseModalOpen(true); };
 
   const handleSendInvite = async (e) => {
-    e.preventDefault();
-    setInviteError('');
-    setInviteSuccess('');
-    
-    if (inviteEmail === userData.email) {
-      setInviteError('Cannot invite yourself.');
-      return;
-    }
-    
-    if (friends.some(f => f.friendEmail === inviteEmail)) {
-        setInviteError('This user is already your friend!');
-        return;
-    }
-
+    e.preventDefault(); setInviteError(''); setInviteSuccess('');
+    if (inviteEmail === userData.email) { setInviteError('Cannot invite yourself.'); return; }
+    if (friends.some(f => f.friendEmail === inviteEmail)) { setInviteError('User is already connected.'); return; }
     setSending(true);
-    
-    try {
-        await sendInvite(inviteEmail);
-        setInviteSuccess(`Invitation sent to: ${inviteEmail}. Waiting for acceptance...`);
-        setInviteEmail('');
-    } catch(err) {
-      setInviteError("Failed to send invitation. Check console.");
-      console.error("Send invitation error:", err);
-    } finally {
-      setSending(false);
-    }
+    try { await sendInvite(inviteEmail); setInviteSuccess(`Invite dispatched to ${inviteEmail}`); setInviteEmail(''); } 
+    catch(err) { setInviteError("Failed to dispatch invite."); } finally { setSending(false); }
   };
 
-  // --- Render Functions (Scoped to Dashboard) ---
-
-  const renderInvitations = () => {
-    if (invitations.length === 0) return null;
-
-    return (
-      <div className="mb-8 p-5 bg-indigo-900/30 rounded-xl border border-indigo-700/50">
-        <h2 className="text-xl font-bold text-indigo-300 flex items-center mb-4">
-          <Mail size={22} className="mr-2"/> Pending Invitations ({invitations.length})
-        </h2>
-        <div className="space-y-3">
-          {invitations.map(invite => (
-            <InvitationCard 
-              key={invite.id}
-              invite={invite}
-              userId={userId}
-              userData={userData}
-              handleAccept={handleAccept}
-            />
-          ))}
-        </div>
-      </div>
-    );
-  }
-  
   const renderOverallBalance = () => {
-    const isOwed = overallBalance < 0;
-    const absBalance = formatCurrency(overallBalance);
-    
-    let message = 'Settled Up';
-    let icon = <User size={24} className="mr-2 text-gray-400"/>;
-    let colorClass = 'text-gray-400';
+    const isOwed = overallBalance < 0; const absBalance = formatCurrency(overallBalance);
+    let message = '0.00'; let title = 'SETTLED'; let colorClass = 'text-zinc-600';
 
     if (overallBalance !== 0) {
-      if (isOwed) {
-        message = `Overall, you are owed ${absBalance}`;
-        icon = <TrendingUp size={24} className="mr-2 text-green-400"/>;
-        colorClass = 'text-green-400';
-      } else {
-        message = `Overall, you owe ${absBalance}`;
-        icon = <TrendingDown size={24} className="mr-2 text-red-400"/>;
-        colorClass = 'text-red-400';
-      }
+      if (isOwed) { title = 'OWED TO YOU'; message = absBalance; colorClass = 'text-emerald-400'; } 
+      else { title = 'YOU OWE'; message = absBalance; colorClass = 'text-rose-400'; }
     }
     
     return (
-      <div className="bg-gray-800 p-6 rounded-xl shadow-xl border border-gray-700 mb-8 flex items-center justify-between">
-        <div className="flex items-center">
-            {icon}
-            <p className="text-xl font-semibold text-white">{message}</p>
+      <div className="bg-zinc-950 p-8 border-2 border-zinc-800 mb-10 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-8">
+        <div>
+            <p className="text-xs font-black text-zinc-500 uppercase tracking-widest mb-2">{title}</p>
+            <p className={`text-4xl md:text-5xl font-black tracking-tighter ${colorClass}`}>{message}</p>
         </div>
-        <Button 
-            onClick={() => setIsInviteModalOpen(true)} 
-            variant="primary" 
-            className="flex items-center text-sm"
-        >
-            <UserPlus size={16} className="mr-2"/> Invite
+        <Button onClick={() => setIsInviteModalOpen(true)} className="w-full sm:w-auto px-6" variant="outline">
+            <UserPlus size={18} className="mr-3"/> Add Contact
         </Button>
       </div>
     );
   };
 
-  // --- RENDER: Friend List (Main Dashboard) ---
-  const renderFriendList = () => (
-    <div className="min-h-screen bg-gray-900 p-4 md:p-8 font-sans">
-      <header className="flex flex-col sm:flex-row justify-between items-center mb-8 pb-4 border-b border-gray-700 space-y-4 sm:space-y-0">
-        <h1 className="text-3xl font-extrabold text-white flex items-center">
-          <DollarSign size={30} className="text-emerald-400 mr-2"/> FairSplit
-        </h1>
-        <div className="flex items-center space-x-4">
-          <span className="text-sm font-medium text-gray-400 truncate hidden sm:block" title={userData.email}>
-            {userName} ({userId.substring(0, 8)})
-          </span>
-          <Button onClick={() => signOut(auth)} variant="secondary" className="flex items-center text-sm">
-            <LogIn size={16} className="mr-2"/> Logout
-          </Button>
-        </div>
-      </header>
-      
-      {renderInvitations()}
-      {renderOverallBalance()}
-      
-      <h2 className="text-2xl font-bold text-gray-200 mb-4">Your Friends</h2>
-      
-      <div className="space-y-3">
-        {totalBalances.length === 0 ? (
-            <div className="p-6 bg-gray-700 rounded-xl border border-gray-600 text-gray-300 flex items-center justify-center text-center">
-                <Users size={20} className="mr-2 text-emerald-400"/> No friends yet. Invite someone above!
-            </div>
-        ) : (
-            totalBalances.map((friend) => {
-                const isOwed = friend.netBalance < 0;
-                const isSettled = friend.netBalance === 0;
-                const absBalance = formatCurrency(friend.netBalance);
-                
-                let balanceMessage = 'Settled Up';
-                let balanceClass = 'text-gray-500';
-
-                if (isOwed) {
-                    balanceMessage = `owes you ${absBalance}`;
-                    balanceClass = 'text-green-400';
-                } else if (!isSettled) {
-                    balanceMessage = `you owe ${absBalance}`;
-                    balanceClass = 'text-red-400';
-                }
-
-                return (
-                    // Clicking the card sets activeFriend, routing to the detail view
-                    <div 
-                        key={friend.friendId} 
-                        onClick={() => setActiveFriend(friend)} 
-                        className="flex items-center justify-between p-4 bg-gray-800 rounded-xl shadow-lg border border-gray-700 cursor-pointer hover:bg-gray-700 transition-colors"
-                    >
-                        <div className="flex items-center">
-                            {/* Mock Avatar */}
-                            <div className="w-12 h-12 bg-emerald-500 rounded-full text-white flex items-center justify-center text-lg font-bold mr-3">
-                                {friend.friendName.charAt(0).toUpperCase()}
-                            </div>
-                            <p className="font-bold text-lg text-white">{friend.friendName}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className={`text-md font-semibold ${balanceClass}`}>{balanceMessage}</p>
-                            {!isSettled && (
-                                <p className="text-xs text-gray-500">
-                                    {isOwed ? `(You are owed)` : `(You owe)`}
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                );
-            })
-        )}
-      </div>
-      
-      {/* Footer / Global Add Expense (Since individual friend buttons are gone) */}
-      {/* We need to re-tool this. For now, let's omit the global add button as the flow expects clicking a friend first. */}
-      
-      {/* Modals remain below the switch logic */}
-    </div>
-  );
-  
-  // --- MAIN RENDER SWITCH ---
   if (activeFriend) {
       return (
           <>
-              <FriendDetailView 
-                  friend={activeFriend}
-                  userId={userId}
-                  userData={userData}
-                  expenses={expenses}
-                  settleUp={handleSettleUp}
-                  goBack={() => setActiveFriend(null)} // Go back to the main list
-                  addExpense={() => handleAddExpense(activeFriend)}
-              />
-              {/* Ensure Modal is rendered here with the correct activeFriend context */}
-              <AddExpenseModal 
-                  userId={userId}
-                  friend={activeFriend}
-                  isOpen={isExpenseModalOpen}
-                  onClose={() => setIsExpenseModalOpen(false)}
-                  addExpenseToDb={addExpenseToDb}
-              />
-              <Modal isOpen={isInviteModalOpen} onClose={() => { setIsInviteModalOpen(false); setInviteError(''); setInviteSuccess(''); }} title="Invite Friend">
-                <form onSubmit={handleSendInvite} className="space-y-4">
-                  <p className="text-sm text-gray-400">Enter your friend's email to send a request. They must accept it to become your friend.</p>
-                  <Input 
-                    id="invite-email" 
-                    label="Friend's Email" 
-                    type="email" 
-                    placeholder="friend@example.com" 
-                    value={inviteEmail} 
-                    onChange={(e) => { setInviteEmail(e.target.value); setInviteSuccess(''); setInviteError(''); }} 
-                    required 
-                    icon={Mail}
-                  />
-                  {inviteError && <p className="text-red-400 text-sm">{inviteError}</p>}
-                  {inviteSuccess && <p className="text-green-400 text-sm flex items-center"><Check size={16} className="mr-1"/>{inviteSuccess}</p>}
-                  <Button type="submit" className="w-full h-12" disabled={!inviteEmail || sending}>
-                    {sending ? 'Sending...' : <><Send size={16} className="mr-2"/> Send Invitation</>}
-                  </Button>
-                </form>
-              </Modal>
+              <FriendDetailView friend={activeFriend} userId={userId} userData={userData} expenses={expenses} settleUp={handleSettleUp} goBack={() => setActiveFriend(null)} addExpense={() => handleAddExpense(activeFriend)} />
+              <AddExpenseModal userId={userId} friend={activeFriend} isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} addExpenseToDb={addExpenseToDb} />
           </>
       );
   }
 
-  // Default: Render the main friend list view
   return (
-    <>
-      {renderFriendList()}
-      {/* Since modals must be at the top level of the dashboard structure, 
-          we need to conditionally render them here too, ensuring they use 
-          the correct state if an activeFriend was briefly set and then the 
-          modal was opened (e.g., from an overall button, though that feature 
-          was removed to support the new flow). */}
-       <Modal isOpen={isInviteModalOpen} onClose={() => { setIsInviteModalOpen(false); setInviteError(''); setInviteSuccess(''); }} title="Invite Friend">
-            <form onSubmit={handleSendInvite} className="space-y-4">
-                <p className="text-sm text-gray-400">Enter your friend's email to send a request. They must accept it to become your friend.</p>
-                <Input 
-                    id="invite-email" 
-                    label="Friend's Email" 
-                    type="email" 
-                    placeholder="friend@example.com" 
-                    value={inviteEmail} 
-                    onChange={(e) => { setInviteEmail(e.target.value); setInviteSuccess(''); setInviteError(''); }} 
-                    required 
-                    icon={Mail}
-                />
-                {inviteError && <p className="text-red-400 text-sm">{inviteError}</p>}
-                {inviteSuccess && <p className="text-green-400 text-sm flex items-center"><Check size={16} className="mr-1"/>{inviteSuccess}</p>}
-                <Button type="submit" className="w-full h-12" disabled={!inviteEmail || sending}>
-                    {sending ? 'Sending...' : <><Send size={16} className="mr-2"/> Send Invitation</>}
-                </Button>
+    <div className="min-h-screen bg-black font-sans pb-20 text-white selection:bg-emerald-400 selection:text-black">
+      <div className="bg-black border-b-2 border-zinc-800 sticky top-0 z-30">
+        <div className="max-w-5xl mx-auto px-6 h-20 flex justify-between items-center">
+            <h1 className="text-xl font-black text-white flex items-center tracking-tighter uppercase">
+                <div className="bg-emerald-400 text-black p-1.5 mr-3">
+                    <IndianRupee size={20} strokeWidth={4}/>
+                </div> 
+                FairSplit
+            </h1>
+            <div className="flex items-center space-x-6">
+                <span className="text-xs font-bold text-zinc-500 tracking-widest uppercase hidden md:block">{userName}</span>
+                <button onClick={signOutUser} className="text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 uppercase tracking-widest transition-colors px-4 py-2 border-2 border-rose-600 hover:border-rose-500">Sign Out</button>
+            </div>
+        </div>
+      </div>
+      
+      <div className="max-w-5xl mx-auto px-6 mt-10">
+        {invitations.length > 0 && (
+          <div className="mb-10">
+            <h2 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-4">Pending Requests</h2>
+            {invitations.map(invite => <InvitationCard key={invite.id} invite={invite} userId={userId} userData={userData} handleAccept={handleAccept} />)}
+          </div>
+        )}
+
+        {renderOverallBalance()}
+        
+        <h2 className="text-lg font-black text-white mb-6 tracking-tight uppercase">Contacts</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+            {totalBalances.length === 0 ? (
+                <div className="col-span-full py-16 bg-zinc-950 border-2 border-zinc-900 text-center text-zinc-600">
+                    <Users size={32} className="mx-auto mb-4 text-zinc-800"/>
+                    <p className="font-bold tracking-widest uppercase text-xs">No contacts. Add someone above.</p>
+                </div>
+            ) : (
+                totalBalances.map((friend) => {
+                    const isOwed = friend.netBalance < 0; const isSettled = friend.netBalance === 0;
+                    const absBalance = formatCurrency(friend.netBalance);
+                    let balanceMessage = 'SETTLED'; let balanceClass = 'text-zinc-600 font-bold';
+                    if (isOwed) { balanceMessage = `OWES ${absBalance}`; balanceClass = 'text-emerald-400 font-black'; } 
+                    else if (!isSettled) { balanceMessage = `OWE ${absBalance}`; balanceClass = 'text-rose-400 font-black'; }
+
+                    return (
+                        <div key={friend.friendId} onClick={() => setActiveFriend(friend)} className="flex items-center justify-between p-6 bg-black border-2 border-zinc-800 cursor-pointer hover:border-emerald-400 transition-colors group">
+                            <div className="flex items-center">
+                                <div className="w-12 h-12 bg-zinc-900 text-zinc-400 group-hover:bg-emerald-400 group-hover:text-black flex items-center justify-center text-lg font-black mr-4 transition-colors">
+                                    {friend.friendName.charAt(0).toUpperCase()}
+                                </div>
+                                <p className="font-black text-white text-base tracking-tight uppercase">{friend.friendName}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className={`text-xs tracking-widest ${balanceClass}`}>{balanceMessage}</p>
+                            </div>
+                        </div>
+                    );
+                })
+            )}
+        </div>
+      </div>
+
+       <Modal isOpen={isInviteModalOpen} onClose={() => { setIsInviteModalOpen(false); setInviteError(''); setInviteSuccess(''); }} title="New Contact">
+            <form onSubmit={handleSendInvite} className="space-y-6">
+                <Input id="invite-email" type="email" placeholder="contact@domain.com" label="User Email" value={inviteEmail} onChange={(e) => { setInviteEmail(e.target.value); setInviteSuccess(''); setInviteError(''); }} required icon={Mail} />
+                {inviteError && <div className="bg-rose-950 border-l-4 border-rose-500 text-rose-400 text-xs font-bold p-3 uppercase">{inviteError}</div>}
+                {inviteSuccess && <div className="bg-emerald-950 border-l-4 border-emerald-400 text-emerald-400 text-xs font-bold p-3 uppercase">{inviteSuccess}</div>}
+                <Button type="submit" className="w-full h-14" disabled={!inviteEmail || sending}>{sending ? 'Sending...' : 'Send Request'}</Button>
             </form>
         </Modal>
-    </>
+    </div>
   );
 };
 
@@ -926,298 +618,88 @@ export default function App() {
   const [friends, setFriends] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [invitations, setInvitations] = useState([]);
-  const [firebaseError, setFirebaseError] = useState(null);
-  const [authInstance, setAuthInstance] = useState(null); // State to hold the auth instance
+  const [authInstance, setAuthInstance] = useState(null);
 
-  // 1. Firebase Initialization and Authentication
   useEffect(() => {
     try {
-      if (!firebaseConfig.projectId) {
-          setFirebaseError('Critical Error: Cannot determine Firebase project ID.');
-          setLoading(false);
-          return;
-      }
-
       const app = initializeApp(firebaseConfig);
       db = getFirestore(app);
-      auth = getAuth(app); // Assign to global variable for use in utility functions
-      setAuthInstance(auth); // Save to state for prop passing
+      auth = getAuth(app); 
+      setAuthInstance(auth); 
       
       const unsubscribe = onAuthStateChanged(auth, async (user) => {
-        if (user) {
-          setUserId(user.uid);
-          setIsAuthenticated(true);
-          setUserData({ email: user.email || user.uid, uid: user.uid });
-        } else {
-          // Clear state immediately on sign-out for clean UI transition
-          setUserId(null); 
-          setIsAuthenticated(false);
-          setUserData({ email: null, uid: null });
-          setFriends([]);
-          setExpenses([]);
-          setInvitations([]);
-          
-          try {
-            if (initialAuthToken) {
-                await signInWithCustomToken(auth, initialAuthToken);
-            }
-          } catch (e) {
-            console.warn("Custom token invalid/failed. User must use email/password.", e);
-          }
+        if (user) { setUserId(user.uid); setIsAuthenticated(true); setUserData({ email: user.email || user.uid, uid: user.uid }); } 
+        else {
+          setUserId(null); setIsAuthenticated(false); setUserData({ email: null, uid: null }); setFriends([]); setExpenses([]); setInvitations([]);
         }
         setLoading(false);
       });
       return () => unsubscribe();
-    } catch (e) {
-      console.error("Failed to initialize Firebase:", e);
-      setFirebaseError("Firebase initialization failed. Check console for details.");
-      setLoading(false);
-    }
+    } catch (e) { setLoading(false); }
   }, []);
 
-  // 2. Firestore Listeners (Data Fetching)
   useEffect(() => {
-    if (!userId || !db || !userData.email) {
-      return () => {}; 
-    }
-    
-    setFirebaseError(null);
-
-    // --- Private Data Listeners ---
-    // Note: The listener cleanup happens automatically when this effect returns 
-    // or when the dependencies change (userId, userData.email)
-    const friendsUnsubscribe = onSnapshot(getFriendsCollection(userId), (snapshot) => {
-      const friendList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setFriends(friendList);
-    }, (error) => {
-      console.error("Error fetching friends:", error);
-    });
-
-    const expensesUnsubscribe = onSnapshot(getExpensesCollection(userId), (snapshot) => {
-      const expenseList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setExpenses(expenseList);
-    }, (error) => {
-      console.error("Error fetching expenses:", error);
-    });
-
-    // --- Public Invitation Listener ---
-    const invitationsQuery = query(getInvitationsCollection(), where("recipientEmail", "==", userData.email));
-    
-    const invitesUnsubscribe = onSnapshot(invitationsQuery, (snapshot) => {
-      const inviteList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setInvitations(inviteList);
-    }, (error) => {
-      console.error("Error fetching invitations:", error);
-    });
-
-
-    return () => {
-      friendsUnsubscribe();
-      expensesUnsubscribe();
-      invitesUnsubscribe();
-    };
+    if (!userId || !db || !userData.email) return () => {}; 
+    const friendsUnsubscribe = onSnapshot(getFriendsCollection(userId), (snapshot) => { setFriends(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); });
+    const expensesUnsubscribe = onSnapshot(getExpensesCollection(userId), (snapshot) => { setExpenses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); });
+    const invitesUnsubscribe = onSnapshot(query(getInvitationsCollection(), where("recipientEmail", "==", userData.email)), (snapshot) => { setInvitations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); });
+    return () => { friendsUnsubscribe(); expensesUnsubscribe(); invitesUnsubscribe(); };
   }, [userId, userData.email]);
 
-  // 3. Data Modification Functions (Synchronized Expense Write)
-  
   const addExpenseToDb = async (myExpense) => {
-    if (!userId) {
-        console.error("Cannot add expense: User not authenticated.");
-        throw new Error("User not authenticated.");
-    }
-    if (!db) throw new Error("Database not initialized.");
-
-    const batch = writeBatch(db);
-    const myExpenseRef = doc(getExpensesCollection(userId));
-
-    // 1. Expense for the CURRENT User (YOU)
-    batch.set(myExpenseRef, myExpense); 
-
-    // 2. Mirror/Reversed Expense for the FRIEND (X)
-    const friendExpense = {
-        ...myExpense,
-        split: -myExpense.split, // CRITICAL: Reverse the split amount
-        userId: myExpense.friendId, // The friend's ID is the owner
-        friendId: myExpense.userId, // My ID is the friend
-    };
-    
-    // Write to the friend's collection
-    const friendExpenseRef = doc(getExpensesCollection(myExpense.friendId));
-    batch.set(friendExpenseRef, friendExpense);
-
+    if (!userId) throw new Error("User not authenticated.");
     try {
-        await batch.commit();
-        console.log("Expense added and mirrored successfully.");
-    } catch (e) {
-        console.error("Failed to sync expense via batch:", e);
-        throw e; 
-    }
+        const response = await fetch('http://localhost:5000/api/expenses/add', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: myExpense.userId, friendId: myExpense.friendId, expenseData: myExpense })
+        });
+        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || 'Network error'); }
+    } catch (e) { throw e; }
   };
 
-  // --- UPDATED: Synchronized Settle Up ---
   const handleSettleUp = async (friendId) => {
       if (!userId) return;
-
       try {
-          // 1. Query unsettled expenses for the CURRENT user involving the friend
-          const myQuery = query(getExpensesCollection(userId), 
-              where("friendId", "==", friendId), 
-              where("isSettled", "==", false)
-          );
-          
+          const myQuery = query(getExpensesCollection(userId), where("friendId", "==", friendId), where("isSettled", "==", false));
           const mySnapshot = await getDocs(myQuery);
-          
-          if (mySnapshot.empty) {
-              console.log("No unsettled debts found for current user.");
-              return;
-          }
+          if (mySnapshot.empty) return;
           
           const batch = writeBatch(db);
+          mySnapshot.docs.forEach((docSnap) => { batch.update(docSnap.ref, { isSettled: true }); });
           
-          // 2. Add updates for CURRENT User's expenses
-          mySnapshot.docs.forEach((docSnap) => {
-              batch.update(docSnap.ref, { isSettled: true });
-              
-              // 3. Find the mirrored document ID in the friend's collection
-              // Since the expense document IDs are different but the content is mirrored,
-              // we must query the friend's collection to find the corresponding document 
-              // that has the same *paidBy*, *amount*, and *description*.
-              // However, since we cannot rely on the source doc ID being the same,
-              // the only way to reliably find the mirror is to query the friend's collection
-              // where the friend's document has userId=friendId and friendId=userId.
-              // For simplicity and relying on the data shape being identical (minus split/owner swap):
-              
-              // Instead of complex lookups, we will rely on the previous cross-write rule
-              // which allows us to write to the friend's collection. 
-              // A simple way is to re-query the friend's collection, but this is inefficient.
-              
-              // We must assume the friend's document has the same description/amount/paidBy/category.
-              
-              // Since Firestore Batches don't allow queries, we must perform the query
-              // outside the batch and add the result to the batch.
-          });
-          
-          // --- Find and update the MIRRORED documents in the friend's collection ---
-          
-          // CRITICAL QUERY: Find mirrored documents in friend's collection
-          // The friend's documents are those where:
-          // - userId (owner) == friendId
-          // - friendId (counterparty) == userId
-          // - isSettled == false
-          
-          const friendQuery = query(getExpensesCollection(friendId),
-              where("userId", "==", friendId),
-              where("friendId", "==", userId),
-              where("isSettled", "==", false)
-          );
-
-          // Execute query for friend's documents
+          const friendQuery = query(getExpensesCollection(friendId), where("userId", "==", friendId), where("friendId", "==", userId), where("isSettled", "==", false));
           const friendSnapshot = await getDocs(friendQuery);
-
-          // Add updates for FRIEND's expenses to the SAME batch
-          friendSnapshot.docs.forEach((docSnap) => {
-              batch.update(docSnap.ref, { isSettled: true });
-          });
+          friendSnapshot.docs.forEach((docSnap) => { batch.update(docSnap.ref, { isSettled: true }); });
           
-          // 4. Commit the synchronized batch
           await batch.commit();
-          console.log(`Successfully settled up all debts with ${friendId} for both users.`);
-
-      } catch (error) {
-          console.error("Failed to perform synchronized settle up:", error);
-      }
+      } catch (error) {}
   };
 
-  const sendInvite = async (recipientEmail) => {
-    await addDoc(getInvitationsCollection(), {
-      senderId: userId,
-      senderEmail: userData.email,
-      recipientEmail: recipientEmail,
-      timestamp: new Date().toISOString(),
-    });
-  };
+  const sendInvite = async (recipientEmail) => { await addDoc(getInvitationsCollection(), { senderId: userId, senderEmail: userData.email, recipientEmail: recipientEmail, timestamp: new Date().toISOString() }); };
 
   const handleAcceptInvite = async (inviteDocId, senderId, senderEmail, recipientId, recipientEmail) => {
-    if (!db) throw new Error("Database not initialized.");
-    
     const batch = writeBatch(db);
-    const senderUsername = getUsername(senderEmail);
-    const recipientUsername = getUsername(recipientEmail);
+    batch.delete(doc(getInvitationsCollection(), inviteDocId));
+    batch.set(doc(getFriendsCollection(recipientId), senderId), { friendId: senderId, friendEmail: senderEmail, friendName: getUsername(senderEmail) }, { merge: true });
+    batch.set(doc(getFriendsCollection(senderId), recipientId), { friendId: recipientId, friendEmail: recipientEmail, friendName: getUsername(recipientEmail) }, { merge: true });
+    await batch.commit();
+  };
 
-    // 1. Delete the public invitation document
-    const inviteRef = doc(getInvitationsCollection(), inviteDocId);
-    batch.delete(inviteRef);
-
-    // 2. Add sender to recipient's (your) friend list 
-    const myFriendRef = doc(getFriendsCollection(recipientId), senderId); 
-    batch.set(myFriendRef, {
-        friendId: senderId,
-        friendEmail: senderEmail,
-        friendName: senderUsername,
-    }, { merge: true });
-
-    // 3. Add recipient (you) to sender's friend list
-    const senderFriendRef = doc(getFriendsCollection(senderId), recipientId); 
-    batch.set(senderFriendRef, {
-        friendId: recipientId,
-        friendEmail: recipientEmail,
-        friendName: recipientUsername,
-    }, { merge: true });
-
-    try {
-        await batch.commit();
-        console.log("Invitation successfully accepted and friends added!");
-    } catch (e) {
-        console.error("Friendship acceptance failed (Batch commit error): ", e);
-        throw new Error("Friendship synchronization failed.");
+  const handleSignOut = async () => {
+    if (auth) {
+        try {
+            await signOut(auth);
+        } catch (error) {
+            console.error("Error signing out:", error);
+        }
     }
   };
 
+  if (loading) return <div className="flex items-center justify-center min-h-screen bg-black"><div className="animate-spin rounded-none h-12 w-12 border-4 border-zinc-900 border-t-emerald-400"></div></div>;
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-emerald-500"></div>
-        <p className="ml-4 text-gray-300 font-medium">Loading FairSplit...</p>
-      </div>
-    );
-  }
-  
-  if (firebaseError) {
-    return (
-        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-            <div className="bg-gray-800 p-8 rounded-xl shadow-lg border border-red-600 max-w-lg">
-                <h2 className="text-xl font-bold text-red-400 mb-4">Application Error</h2>
-                <p className="text-gray-300 mb-4">{firebaseError}</p>
-                
-                {auth && (
-                    <Button onClick={() => signOut(auth)} variant="secondary" className="mt-4 w-full">Sign Out / Retry</Button>
-                )}
-            </div>
-        </div>
-    );
-  }
-
-
-  // Pass authInstance to AuthScreen to ensure it's available for handleSubmit
-  if (!isAuthenticated || !userId) {
-    return <AuthScreen onLoginSuccess={() => {}} authInstance={authInstance} />;
-  }
+  if (!isAuthenticated || !userId) return <AuthScreen authInstance={authInstance} />;
 
   return (
-    <div className="min-h-screen font-sans">
-      <Dashboard 
-        userId={userId}
-        userData={userData}
-        friends={friends} 
-        expenses={expenses} 
-        invitations={invitations}
-        addExpenseToDb={addExpenseToDb}
-        settleUp={handleSettleUp}
-        sendInvite={sendInvite}
-        handleAccept={handleAcceptInvite}
-        signOut={() => signOut(auth)}
-      />
-    </div >
+      <Dashboard userId={userId} userData={userData} friends={friends} expenses={expenses} invitations={invitations} addExpenseToDb={addExpenseToDb} settleUp={handleSettleUp} sendInvite={sendInvite} handleAccept={handleAcceptInvite} signOutUser={handleSignOut} />
   );
 }
