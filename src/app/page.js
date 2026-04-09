@@ -11,7 +11,7 @@ import {
   query, where, writeBatch, getDocs, setLogLevel 
 } from 'firebase/firestore';
 import { 
-  LogIn, Plus, X, UserPlus, Send, Check, IndianRupee, Mail, Receipt, TrendingUp, TrendingDown, Users, User, ArrowLeft 
+  LogIn, Plus, X, UserPlus, Send, Check, IndianRupee, Mail, Receipt, TrendingUp, TrendingDown, Users, User, ArrowLeft, Download, PieChart, Activity, Clock 
 } from 'lucide-react';
 
 setLogLevel('debug');
@@ -92,7 +92,6 @@ const Input = ({ label, id, type = 'text', value, onChange, placeholder, require
   </div>
 );
 
-// 🔴 UPDATED: Modal now constrained to max-height with internal scrolling
 const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
   return (
@@ -307,7 +306,6 @@ const AddExpenseModal = ({ userId, friend, isOpen, onClose, addExpenseToDb }) =>
     }
   }
 
-  // 🔴 UPDATED: Tightened padding, reduced text sizes, and hid webkit spin buttons
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Log Expense">
       <form onSubmit={handleSubmit} className="space-y-5"> 
@@ -476,12 +474,102 @@ const FriendDetailView = ({ friend, userId, userData, expenses, settleUp, goBack
     );
 };
 
-// --- Component: Dashboard Views ---
+// --- Component: Spending Analytics Modal ---
+const AnalyticsModal = ({ isOpen, onClose, expenses }) => {
+  const categoryTotals = expenses.reduce((acc, exp) => {
+    const amount = Math.abs(exp.split) / 100;
+    acc[exp.category] = (acc[exp.category] || 0) + amount;
+    return acc;
+  }, {});
 
+  const totalSpent = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
+  const sortedCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Spending Insights">
+      <div className="space-y-6">
+        <div className="bg-black p-6 border-2 border-zinc-800 text-center">
+          <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Total Volume Handled</p>
+          <p className="text-4xl font-black text-emerald-400">₹{totalSpent.toFixed(2)}</p>
+        </div>
+
+        <div className="space-y-4">
+          <p className="text-sm font-black text-white uppercase tracking-widest border-b-2 border-zinc-800 pb-2">By Category</p>
+          {sortedCategories.length === 0 ? (
+            <p className="text-zinc-600 font-bold text-sm uppercase">No data available yet.</p>
+          ) : (
+            sortedCategories.map(([category, amount]) => {
+              const percentage = totalSpent > 0 ? (amount / totalSpent) * 100 : 0;
+              return (
+                <div key={category} className="space-y-2">
+                  <div className="flex justify-between items-end">
+                    <span className="text-sm font-bold text-zinc-300 uppercase">{category}</span>
+                    <span className="text-sm font-black text-white">₹{amount.toFixed(2)}</span>
+                  </div>
+                  <div className="w-full bg-zinc-900 h-3 border border-zinc-800">
+                    <div 
+                      className="bg-emerald-400 h-full transition-all duration-1000 ease-out"
+                      style={{ width: `${percentage}%` }}
+                    ></div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// --- Component: Global Activity Feed ---
+const ActivityModal = ({ isOpen, onClose, expenses, friends }) => {
+  const sortedExpenses = [...expenses].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Audit Trail">
+      <div className="space-y-4">
+        {sortedExpenses.length === 0 ? (
+          <div className="text-center py-10 bg-black border-2 border-zinc-800">
+            <Clock size={32} className="mx-auto mb-3 text-zinc-700"/>
+            <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs">No recorded activity.</p>
+          </div>
+        ) : (
+          sortedExpenses.map((exp) => {
+            const isOwed = exp.split < 0;
+            const friend = friends.find(f => f.friendId === exp.friendId);
+            const friendName = friend ? friend.friendName : 'Unknown';
+            
+            return (
+              <div key={exp.id} className="flex justify-between items-center p-4 bg-black border-2 border-zinc-800 hover:border-zinc-600 transition-colors">
+                <div>
+                  <p className="font-bold text-white uppercase text-sm tracking-wide">{exp.description}</p>
+                  <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mt-1">
+                    With <span className="text-zinc-300">{friendName}</span> • {exp.date}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className={`text-sm font-black tracking-widest ${isOwed ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {isOwed ? '+' : '-'}{formatCurrency(exp.split)}
+                  </p>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </Modal>
+  );
+};
+
+// --- Component: Dashboard Views ---
 const Dashboard = ({ userId, userData, expenses, friends, invitations, addExpenseToDb, settleUp, sendInvite, handleAccept, signOutUser }) => {
   const [activeFriend, setActiveFriend] = useState(null); 
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false); 
+  const [isActivityOpen, setIsActivityOpen] = useState(false);
+  const [filter, setFilter] = useState('ALL'); 
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteError, setInviteError] = useState('');
   const [inviteSuccess, setInviteSuccess] = useState('');
@@ -505,6 +593,33 @@ const Dashboard = ({ userId, userData, expenses, friends, invitations, addExpens
     catch(err) { setInviteError("Failed to dispatch invite."); } finally { setSending(false); }
   };
 
+  const exportToCSV = () => {
+    let csvContent = "Date,Description,Category,Total Amount,Your Share,Status\n";
+
+    expenses.forEach(exp => {
+      const isOwed = exp.split < 0;
+      const share = `₹${(Math.abs(exp.split) / 100).toFixed(2)}`;
+      const status = exp.isSettled ? "Settled" : (isOwed ? "Owed to You" : "You Owe");
+      const total = `₹${(exp.amount / 100).toFixed(2)}`;
+      
+      const cleanDesc = exp.description ? exp.description.replace(/,/g, '') : ''; 
+      
+      csvContent += `${exp.date},${cleanDesc},${exp.category},${total},${share},${status}\n`;
+    });
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "FairSplit_Financial_Report.csv");
+    document.body.appendChild(link);
+    link.click();
+    
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const renderOverallBalance = () => {
     const isOwed = overallBalance < 0; const absBalance = formatCurrency(overallBalance);
     let message = '0.00'; let title = 'SETTLED'; let colorClass = 'text-zinc-600';
@@ -515,14 +630,25 @@ const Dashboard = ({ userId, userData, expenses, friends, invitations, addExpens
     }
     
     return (
-      <div className="bg-zinc-950 p-8 border-2 border-zinc-800 mb-10 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-8">
+      <div className="bg-zinc-950 p-8 border-2 border-zinc-800 mb-10 flex flex-col md:flex-row items-start md:items-end justify-between gap-8">
         <div>
             <p className="text-xs font-black text-zinc-500 uppercase tracking-widest mb-2">{title}</p>
             <p className={`text-4xl md:text-5xl font-black tracking-tighter ${colorClass}`}>{message}</p>
         </div>
-        <Button onClick={() => setIsInviteModalOpen(true)} className="w-full sm:w-auto px-6" variant="outline">
-            <UserPlus size={18} className="mr-3"/> Add Contact
-        </Button>
+        <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3 relative z-10 flex-wrap justify-end">
+            <Button onClick={() => setIsAnalyticsOpen(true)} className="px-4 bg-zinc-900 border-zinc-800 text-emerald-400 hover:border-emerald-400">
+                <PieChart size={18} className="mr-2"/> Insights
+            </Button>
+            <Button onClick={() => setIsActivityOpen(true)} className="px-4 bg-zinc-900 border-zinc-800 text-emerald-400 hover:border-emerald-400">
+                <Activity size={18} className="mr-2"/> Activity
+            </Button>
+            <Button onClick={exportToCSV} className="px-4 bg-zinc-900 border-zinc-800 text-emerald-400 hover:border-emerald-400">
+                <Download size={18} className="mr-2"/> Export
+            </Button>
+            <Button onClick={() => setIsInviteModalOpen(true)} className="px-6">
+                <UserPlus size={18} className="mr-2"/> Add Contact
+            </Button>
+        </div>
       </div>
     );
   };
@@ -563,15 +689,31 @@ const Dashboard = ({ userId, userData, expenses, friends, invitations, addExpens
 
         {renderOverallBalance()}
         
-        <h2 className="text-lg font-black text-white mb-6 tracking-tight uppercase">Contacts</h2>
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+            <h2 className="text-lg font-black text-white tracking-tight uppercase">Contacts</h2>
+            <div className="flex space-x-2">
+                <button type="button" onClick={() => setFilter('ALL')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest border-2 transition-colors ${filter === 'ALL' ? 'bg-white text-black border-white' : 'bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600'}`}>All</button>
+                <button type="button" onClick={() => setFilter('OWES_ME')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest border-2 transition-colors ${filter === 'OWES_ME' ? 'bg-emerald-400 text-black border-emerald-400' : 'bg-transparent text-emerald-400/50 border-zinc-800 hover:border-emerald-400/50'}`}>Owes Me</button>
+                <button type="button" onClick={() => setFilter('I_OWE')} className={`px-4 py-2 text-xs font-bold uppercase tracking-widest border-2 transition-colors ${filter === 'I_OWE' ? 'bg-rose-400 text-black border-rose-400' : 'bg-transparent text-rose-400/50 border-zinc-800 hover:border-rose-400/50'}`}>I Owe</button>
+            </div>
+        </div>
+
         <div className="grid gap-4 md:grid-cols-2">
-            {totalBalances.length === 0 ? (
+            {totalBalances.filter(friend => {
+                if (filter === 'OWES_ME') return friend.netBalance < 0;
+                if (filter === 'I_OWE') return friend.netBalance > 0;
+                return true;
+            }).length === 0 ? (
                 <div className="col-span-full py-16 bg-zinc-950 border-2 border-zinc-900 text-center text-zinc-600">
                     <Users size={32} className="mx-auto mb-4 text-zinc-800"/>
-                    <p className="font-bold tracking-widest uppercase text-xs">No contacts. Add someone above.</p>
+                    <p className="font-bold tracking-widest uppercase text-xs">No contacts match this filter.</p>
                 </div>
             ) : (
-                totalBalances.map((friend) => {
+                totalBalances.filter(friend => {
+                    if (filter === 'OWES_ME') return friend.netBalance < 0;
+                    if (filter === 'I_OWE') return friend.netBalance > 0;
+                    return true;
+                }).map((friend) => {
                     const isOwed = friend.netBalance < 0; const isSettled = friend.netBalance === 0;
                     const absBalance = formatCurrency(friend.netBalance);
                     let balanceMessage = 'SETTLED'; let balanceClass = 'text-zinc-600 font-bold';
@@ -604,6 +746,9 @@ const Dashboard = ({ userId, userData, expenses, friends, invitations, addExpens
                 <Button type="submit" className="w-full h-14" disabled={!inviteEmail || sending}>{sending ? 'Sending...' : 'Send Request'}</Button>
             </form>
         </Modal>
+
+        <AnalyticsModal isOpen={isAnalyticsOpen} onClose={() => setIsAnalyticsOpen(false)} expenses={expenses} />
+        <ActivityModal isOpen={isActivityOpen} onClose={() => setIsActivityOpen(false)} expenses={expenses} friends={friends} />
     </div>
   );
 };
